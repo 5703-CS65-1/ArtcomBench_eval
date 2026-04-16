@@ -13,6 +13,7 @@ import asyncio
 import base64
 import json
 import logging
+import re
 import time
 from pathlib import Path
 from typing import Any
@@ -22,15 +23,12 @@ from openai import AsyncOpenAI
 import config
 from metrics import aggregate_corpus_metrics, aggregate_sample_metrics
 from prompts import (
-    CLAIM_EXTRACTION_SYSTEM,
-    CLAIM_EXTRACTION_USER,
     JUDGING_SYSTEM,
     JUDGING_USER,
 )
 from schemas import (
     CandidateClaim,
     CandidateOutput,
-    ClaimExtractionResult,
     CorpusMetrics,
     GoldSample,
     JudgingResult,
@@ -174,26 +172,61 @@ async def run_candidate_model(sample: GoldSample) -> CandidateOutput:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Stage B: Claim extraction (no gold, no image)
+# Stage B: Rule-based claim extraction by 10 aesthetic dimensions
 # ═══════════════════════════════════════════════════════════════════════════
 
-async def extract_claims(candidate_text: str) -> list[CandidateClaim]:
-    messages = [
-        {"role": "system", "content": CLAIM_EXTRACTION_SYSTEM},
-        {
-            "role": "user",
-            "content": CLAIM_EXTRACTION_USER.format(candidate_text=candidate_text),
-        },
-    ]
+DIMENSIONS = [
+    "Layout and Composition",
+    "Space and Perspective",
+    "Light and Shadow",
+    "Color",
+    "Details and Texture",
+    "Theme and Logic",
+    "Mood",
+    "The Overall",
+    "Creativity",
+    "Sense of Order",
+]
 
-    data = await _call_llm_json(
-        messages,
-        model=config.JUDGE_MODEL,
-        temperature=config.JUDGE_TEMPERATURE,
-        max_tokens=config.JUDGE_MAX_TOKENS,
-    )
-    result = ClaimExtractionResult.model_validate(data)
-    return result.candidate_claims
+_DIMENSION_PATTERN = "|".join(re.escape(d) for d in DIMENSIONS)
+_HEADER_RE = re.compile(
+    r"^[\s*#]*\d{0,2}\.?\s*(" + _DIMENSION_PATTERN + r")[\s*:]*$",
+    re.MULTILINE | re.IGNORECASE,
+)
+
+
+def extract_claims(candidate_text: str) -> list[CandidateClaim]:
+    """Split candidate text into claims by the 10 aesthetic dimension headings."""
+    matches = list(_HEADER_RE.finditer(candidate_text))
+
+    if not matches:
+        log.warning("No dimension headings found — returning entire text as one claim")
+        text = candidate_text.strip()
+        if text:
+            return [CandidateClaim(cand_claim_id="cand_01", text=text)]
+        return []
+
+    claims: list[CandidateClaim] = []
+    for i, m in enumerate(matches):
+        dim_name = m.group(1)
+        start = m.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(candidate_text)
+        content = candidate_text[start:end].strip()
+        if content:
+            claims.append(
+                CandidateClaim(
+                    cand_claim_id=f"cand_{i + 1:02d}",
+                    text=f"[{dim_name}] {content}",
+                )
+            )
+
+    if not claims:
+        log.warning("Dimension headings found but all sections empty — fallback")
+        text = candidate_text.strip()
+        if text:
+            return [CandidateClaim(cand_claim_id="cand_01", text=text)]
+
+    return claims
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -281,7 +314,7 @@ async def process_sample(
 
     # Stage B
     log.info("[B] Extracting claims for %s", sid)
-    candidate_claims = await extract_claims(cand.candidate_text)
+    candidate_claims = extract_claims(cand.candidate_text)
     if not candidate_claims:
         log.warning("No claims extracted for %s — skipping judging", sid)
         return {
@@ -349,7 +382,7 @@ async def run_all(
 
             # Stage B — 完成即落盘
             log.info("[B] Extracting claims for %s", sid)
-            candidate_claims = await extract_claims(cand.candidate_text)
+            candidate_claims = extract_claims(cand.candidate_text)
             claims_f.write(
                 json.dumps(
                     {"sample_id": sid, "candidate_claims": [c.model_dump() for c in candidate_claims]},
