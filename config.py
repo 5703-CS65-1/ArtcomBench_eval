@@ -19,6 +19,9 @@ MAX_JSON_RETRIES = 2
 # ── Thinking mode（仅对支持深度思考的模型生效，如 qwen3.6-plus）─────────────
 ENABLE_THINKING = False
 
+# ── Judge image toggle ────────────────────────────────────────────────────
+JUDGE_WITH_IMAGE = True
+
 # ── Concurrency ────────────────────────────────────────────────────────────
 MAX_CONCURRENT_REQUESTS = 8
 

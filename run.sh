@@ -22,6 +22,7 @@ OUTPUT_DIR="outputs"                # 输出目录
 CONCURRENCY=1                       # 最大并发 API 请求数
 LIMIT="1"                            # 只跑前 N 条（留空=全量 500 条）
 ENABLE_THINKING=true               # 开启深度思考模式（true/false，适用于 qwen3.6-plus 等）
+JUDGE_WITH_IMAGE=true              # 是否向裁判模型提供图片（false=纯文本，仅依据 Gold reference 判定）
 
 # ══════════════════════════════════════════════════════════════════════════
 # 以下无需修改
@@ -42,9 +43,10 @@ CMD=(
     --concurrency   "$CONCURRENCY"
 )
 
-[[ -n "$BASE_URL" ]]          && CMD+=(--base-url "$BASE_URL")
-[[ -n "$LIMIT"    ]]          && CMD+=(--limit "$LIMIT")
+[[ -n "$BASE_URL" ]]               && CMD+=(--base-url "$BASE_URL")
+[[ -n "$LIMIT"    ]]               && CMD+=(--limit "$LIMIT")
 [[ "$ENABLE_THINKING" == "true" ]] && CMD+=(--enable-thinking)
+[[ "$JUDGE_WITH_IMAGE" != "true" ]] && CMD+=(--no-judge-image)
 
 echo "════════════════════════════════════════════════════════"
 echo "  ArtcomBench Faithfulness Eval"
@@ -53,6 +55,7 @@ echo "  judge_model     : $JUDGE_MODEL"
 echo "  concurrency     : $CONCURRENCY"
 echo "  limit           : ${LIMIT:-all}"
 echo "  enable_thinking : $ENABLE_THINKING"
+echo "  judge_with_image: $JUDGE_WITH_IMAGE"
 echo "  output          : $OUTPUT_DIR"
 echo "════════════════════════════════════════════════════════"
 

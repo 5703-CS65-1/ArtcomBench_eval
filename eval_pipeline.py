@@ -238,10 +238,6 @@ async def judge_claims(
     candidate_claims: list[CandidateClaim],
     candidate_text: str,
 ) -> JudgingResult:
-    image_path = config.IMAGE_DIR / sample.image
-    b64 = encode_image_base64(image_path)
-    mt = image_media_type(sample.image)
-
     obs_json = json.dumps(
         [o.model_dump() for o in sample.observations], ensure_ascii=False
     )
@@ -267,18 +263,28 @@ async def judge_claims(
         candidate_text=candidate_text,
     )
 
+    if config.JUDGE_WITH_IMAGE:
+        image_path = config.IMAGE_DIR / sample.image
+        b64 = encode_image_base64(image_path)
+        mt = image_media_type(sample.image)
+        user_content: str | list = [
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:{mt};base64,{b64}"},
+            },
+            {"type": "text", "text": user_text},
+        ]
+    else:
+        user_text = user_text.replace(
+            "You are given a painting image together with calibrated gold reference data",
+            "You are given calibrated gold reference data",
+            1,
+        )
+        user_content = user_text
+
     messages = [
         {"role": "system", "content": JUDGING_SYSTEM},
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "image_url",
-                    "image_url": {"url": f"data:{mt};base64,{b64}"},
-                },
-                {"type": "text", "text": user_text},
-            ],
-        },
+        {"role": "user", "content": user_content},
     ]
 
     data = await _call_llm_json(
@@ -489,6 +495,8 @@ def main() -> None:
                         help="OpenAI-compatible API base URL")
     parser.add_argument("--enable-thinking", action="store_true", default=False,
                         help="Enable thinking mode (e.g. for qwen3.6-plus)")
+    parser.add_argument("--no-judge-image", action="store_true", default=False,
+                        help="Do not send image to judge model (text-only judging based on gold reference)")
     args = parser.parse_args()
 
     if args.candidate_model:
@@ -503,6 +511,8 @@ def main() -> None:
         config.IMAGE_DIR = args.image_dir
     if args.enable_thinking:
         config.ENABLE_THINKING = True
+    if args.no_judge_image:
+        config.JUDGE_WITH_IMAGE = False
 
     global client
     client_kwargs: dict[str, str] = {}
