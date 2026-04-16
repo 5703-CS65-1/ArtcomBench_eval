@@ -1,0 +1,1 @@
+You are a careful evaluator extracting atomic claims from an aesthetic commentary about a painting.
