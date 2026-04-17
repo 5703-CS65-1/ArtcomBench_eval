@@ -41,15 +41,33 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
-client: AsyncOpenAI | None = None
+candidate_client: AsyncOpenAI | None = None
+judge_client: AsyncOpenAI | None = None
 semaphore: asyncio.Semaphore | None = None
 
 
-def _ensure_client() -> AsyncOpenAI:
-    global client
-    if client is None:
-        client = AsyncOpenAI()
-    return client
+def _get_candidate_client() -> AsyncOpenAI:
+    global candidate_client
+    if candidate_client is None:
+        kwargs: dict = {}
+        if config.CANDIDATE_API_KEY:
+            kwargs["api_key"] = config.CANDIDATE_API_KEY
+        if config.CANDIDATE_BASE_URL:
+            kwargs["base_url"] = config.CANDIDATE_BASE_URL
+        candidate_client = AsyncOpenAI(**kwargs)
+    return candidate_client
+
+
+def _get_judge_client() -> AsyncOpenAI:
+    global judge_client
+    if judge_client is None:
+        kwargs: dict = {}
+        if config.JUDGE_API_KEY:
+            kwargs["api_key"] = config.JUDGE_API_KEY
+        if config.JUDGE_BASE_URL:
+            kwargs["base_url"] = config.JUDGE_BASE_URL
+        judge_client = AsyncOpenAI(**kwargs)
+    return judge_client
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -99,12 +117,19 @@ async def _call_llm(
     model: str,
     temperature: float,
     max_tokens: int,
+    use_judge: bool = False,
 ) -> str:
-    """Call the OpenAI chat endpoint with semaphore throttling."""
+    """Call the OpenAI chat endpoint with semaphore throttling.
+
+    use_judge=True  → judge_client + ENABLE_THINKING flag
+    use_judge=False → candidate_client
+    """
     assert semaphore is not None
-    c = _ensure_client()
+    c = _get_judge_client() if use_judge else _get_candidate_client()
     extra: dict = {}
-    if config.ENABLE_THINKING:
+    if use_judge and config.ENABLE_THINKING:
+        extra["extra_body"] = {"enable_thinking": True}
+    elif not use_judge and config.CANDIDATE_ENABLE_THINKING:
         extra["extra_body"] = {"enable_thinking": True}
     async with semaphore:
         resp = await c.chat.completions.create(
@@ -123,12 +148,16 @@ async def _call_llm_json(
     model: str,
     temperature: float,
     max_tokens: int,
-    retries: int = config.MAX_JSON_RETRIES,
+    use_judge: bool = False,
+    retries: int | None = None,
 ) -> dict[str, Any]:
     """Call LLM and parse response as JSON, with automatic retries."""
+    if retries is None:
+        retries = config.MAX_JSON_RETRIES
     for attempt in range(1 + retries):
         raw = await _call_llm(
-            messages, model=model, temperature=temperature, max_tokens=max_tokens
+            messages, model=model, temperature=temperature,
+            max_tokens=max_tokens, use_judge=use_judge,
         )
         try:
             return json.loads(_strip_json_fences(raw))
@@ -167,6 +196,7 @@ async def run_candidate_model(sample: GoldSample) -> CandidateOutput:
         model=config.CANDIDATE_MODEL,
         temperature=0,
         max_tokens=config.JUDGE_MAX_TOKENS,
+        use_judge=False,
     )
     return CandidateOutput(sample_id=sample.id, candidate_text=text)
 
@@ -292,6 +322,7 @@ async def judge_claims(
         model=config.JUDGE_MODEL,
         temperature=config.JUDGE_TEMPERATURE,
         max_tokens=config.JUDGE_MAX_TOKENS,
+        use_judge=True,
     )
     return JudgingResult.model_validate(data)
 
@@ -489,12 +520,20 @@ def main() -> None:
                         help="Max tokens for judge responses")
     parser.add_argument("--concurrency", type=int, default=None,
                         help="Max concurrent API requests")
-    parser.add_argument("--api-key", type=str, default=None,
-                        help="OpenAI API key (or set OPENAI_API_KEY env)")
-    parser.add_argument("--base-url", type=str, default=None,
-                        help="OpenAI-compatible API base URL")
+    parser.add_argument("--candidate-api-key", type=str, default=None,
+                        help="API key for candidate model (falls back to OPENAI_API_KEY env)")
+    parser.add_argument("--candidate-base-url", type=str, default=None,
+                        help="Base URL for candidate model API (e.g. Dashscope, vLLM)")
+    parser.add_argument("--judge-api-key", type=str, default=None,
+                        help="API key for judge model (falls back to OPENAI_API_KEY env)")
+    parser.add_argument("--judge-base-url", type=str, default=None,
+                        help="Base URL for judge model API (e.g. DeepSeek, Azure)")
     parser.add_argument("--enable-thinking", action="store_true", default=False,
-                        help="Enable thinking mode (e.g. for qwen3.6-plus)")
+                        help="Enable thinking mode for judge model (e.g. qwen3.6-plus)")
+    parser.add_argument("--candidate-enable-thinking", action="store_true", default=False,
+                        help="Enable thinking mode for candidate model (Stage A)")
+    parser.add_argument("--max-json-retries", type=int, default=None,
+                        help="Max JSON parse retries on LLM response (default: config.MAX_JSON_RETRIES)")
     parser.add_argument("--no-judge-image", action="store_true", default=False,
                         help="Do not send image to judge model (text-only judging based on gold reference)")
     args = parser.parse_args()
@@ -509,18 +548,22 @@ def main() -> None:
         config.MAX_CONCURRENT_REQUESTS = args.concurrency
     if args.image_dir:
         config.IMAGE_DIR = args.image_dir
+    if args.candidate_api_key:
+        config.CANDIDATE_API_KEY = args.candidate_api_key
+    if args.candidate_base_url:
+        config.CANDIDATE_BASE_URL = args.candidate_base_url
+    if args.judge_api_key:
+        config.JUDGE_API_KEY = args.judge_api_key
+    if args.judge_base_url:
+        config.JUDGE_BASE_URL = args.judge_base_url
     if args.enable_thinking:
         config.ENABLE_THINKING = True
+    if args.candidate_enable_thinking:
+        config.CANDIDATE_ENABLE_THINKING = True
+    if args.max_json_retries is not None:
+        config.MAX_JSON_RETRIES = args.max_json_retries
     if args.no_judge_image:
         config.JUDGE_WITH_IMAGE = False
-
-    global client
-    client_kwargs: dict[str, str] = {}
-    if args.api_key:
-        client_kwargs["api_key"] = args.api_key
-    if args.base_url:
-        client_kwargs["base_url"] = args.base_url
-    client = AsyncOpenAI(**client_kwargs) if client_kwargs else AsyncOpenAI()
 
     asyncio.run(run_all(data_path=args.data, output_dir=args.output, limit=args.limit))
 

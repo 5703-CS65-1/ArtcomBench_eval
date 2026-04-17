@@ -1,1 +1,24 @@
-现在想的是
+FP_soft=0.7100  EGS=0.5950  LF-P=0.8333  LF-C=0.6250  LF-E=0.6000  CR=0.7273     with no-image and no-thinking
+
+FP_soft=0.7200  EGS=0.6675  LF-P=0.7619  LF-C=0.7083  LF-E=0.6000  CR=0.8000     with image and thinking
+
+FP_soft=0.7100  EGS=0.6050  LF-P=0.8250  LF-C=0.6400  LF-E=0.6000  CR=0.7818     with no-image and thinking
+
+FP_soft=0.6900  EGS=0.5625  LF-P=0.8000  LF-C=0.6200  LF-E=0.6000  CR=0.8182     qwem3.6 with no-image and thinking
+
+FP_soft=0.7000  EGS=0.6300  LF-P=0.8250  LF-C=0.6200  LF-E=0.6000  CR=0.8182
+
+FP_soft=0.8260  EGS=0.7638  LF-P=0.8950  LF-C=0.7608  LF-E=0.8542  CR=0.8865
+
+FP_soft=0.8143  EGS=0.7449  LF-P=0.8706  LF-C=0.7604  LF-E=0.8469  CR=0.8713
+
+
+
+
+FP_soft=0.7094  EGS=0.6148  LF-P=0.7727  LF-C=0.6453  LF-E=0.7604  CR=0.8002
+
+
+
+FP_soft=0.6290  EGS=0.4738  LF-P=0.6890  LF-C=0.5622  LF-E=0.7000  CR=0.7514   qwem3-8b with no-image and thinking
+FP_soft=0.7640  EGS=0.6365  LF-P=0.8454  LF-C=0.6860  LF-E=0.8039  CR=0.8324   qwem3.6-plus with no-image and thinking
+

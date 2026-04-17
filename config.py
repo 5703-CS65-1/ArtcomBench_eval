@@ -9,15 +9,22 @@ DATA_JSONL = Path("1.jsonl")
 IMAGE_DIR = Path("package_1_images")
 OUTPUT_DIR = Path("outputs")
 
-# ── Model settings ─────────────────────────────────────────────────────────
+# ── Candidate model (Stage A) ──────────────────────────────────────────────
 CANDIDATE_MODEL = "gpt-4o"
+CANDIDATE_API_KEY: str | None = None   # None → fall back to OPENAI_API_KEY env var
+CANDIDATE_BASE_URL: str | None = None  # None → OpenAI official endpoint
+
+# ── Judge model (Stage C) ──────────────────────────────────────────────────
 JUDGE_MODEL = "gpt-4o"
+JUDGE_API_KEY: str | None = None       # None → fall back to OPENAI_API_KEY env var
+JUDGE_BASE_URL: str | None = None      # None → OpenAI official endpoint
 JUDGE_TEMPERATURE = 0
 JUDGE_MAX_TOKENS = 4096
 MAX_JSON_RETRIES = 2
 
-# ── Thinking mode（仅对支持深度思考的模型生效，如 qwen3.6-plus）─────────────
-ENABLE_THINKING = False
+# ── Thinking mode
+CANDIDATE_ENABLE_THINKING = False  # candidate 模型（Stage A）思考模式开关
+ENABLE_THINKING = False            # judge 模型（Stage C）思考模式开关
 
 # ── Judge image toggle ────────────────────────────────────────────────────
 JUDGE_WITH_IMAGE = True

@@ -1,1 +1,0 @@
-{"sample_id": "00148cf2d7134849872279e21131540c", "num_candidate_claims": 11, "num_gold_claims": 11, "faithful_precision_soft": 0.7272727272727273, "evidence_grounding_score": 0.6590909090909091, "lf_perception": 1.0, "lf_cognition": 0.5833333333333334, "lf_emotion": 0.5, "claim_recall": 0.7272727272727273}
