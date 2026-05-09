@@ -1,2 +1,5 @@
 package_1_images/
 outputs/
+__pycache__/
+results/
+*.pyc
